@@ -40,7 +40,7 @@ Aplikacja do zarządzania zgłoszeniami (tickets) na Discordzie, napisana w Type
 	```
 4. Wykonaj migracje bazy danych:
 	```sh
-	npx prisma migrate dev
+	bunx prisma migrate dev
 	```
 5. (Opcjonalnie) Skonfiguruj integrację z S3/R2 (Cloudflare lub AWS) w `.env`, aby archiwizować załączniki z ticketów.
 
@@ -104,8 +104,8 @@ R2_PUBLIC_BASE_URL=
 - `bun run src/index.ts` – uruchomienie bota i serwera
 - `bun run dev` – tryb developerski (watch mode)
 - `npm run start` – uruchomienie przez npm
-- `npx prisma migrate dev` – migracje bazy danych
-- `npx prisma studio` – panel do podglądu bazy
+- `bunx prisma migrate dev` – migracje bazy danych
+- `bunx prisma studio` – panel do podglądu bazy
 
 ## REST API
 
