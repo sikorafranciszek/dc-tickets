@@ -45,6 +45,7 @@ Aplikacja do zarządzania zgłoszeniami (tickets) na Discordzie, napisana w Type
 5. (Opcjonalnie) Skonfiguruj integrację z S3/R2 (Cloudflare lub AWS) w `.env`, aby archiwizować załączniki z ticketów.
 
 
+
 ## Uruchomienie
 
 ### Tryb produkcyjny
@@ -58,6 +59,47 @@ npm run start
 ```sh
 bun run dev
 ```
+
+### Uruchamianie przez pm2 z bun (zalecane na serwerze)
+
+1. Upewnij się, że masz zainstalowany pm2 globalnie:
+	 ```sh
+	 bun install -g pm2
+	 ```
+2. Skonfiguruj ścieżkę do bun w pliku `ecosystem.config.cjs` (przykład poniżej).
+3. Uruchom aplikację przez pm2:
+	 ```sh
+	 pm2 start ecosystem.config.cjs
+	 ```
+4. Sprawdź status:
+	 ```sh
+	 pm2 status
+	 ```
+5. Zatrzymaj aplikację:
+	 ```sh
+	 pm2 stop dc-tickets
+	 ```
+
+#### Przykład pliku ecosystem.config.cjs
+
+```js
+// ecosystem.config.cjs
+module.exports = {
+	apps: [
+		{
+			name: "dc-tickets",
+			script: "src/index.ts",         // Bun potrafi odpalić TS bez kompilacji
+			interpreter: "/pełna/ścieżka/do/bun", // np. /home/user/.bun/bin/bun lub C:/Users/<user>/.bun/bin/bun.exe
+			watch: false,
+			env: {
+				NODE_ENV: "production",
+			},
+		},
+	],
+};
+```
+
+> **Uwaga:** Podaj pełną ścieżkę do bun w polu `interpreter`. Na Windowsie może to być np. `C:/Users/<user>/.bun/bin/bun.exe`.
 
 
 ## Struktura projektu
