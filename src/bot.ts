@@ -11,6 +11,7 @@ import {
   Partials,
   PermissionFlagsBits,
   TextChannel,
+  MessageFlags,
   type GuildTextBasedChannel,
   type OverwriteResolvable,
 } from "discord.js";
@@ -123,7 +124,7 @@ async function handleSetupTickets(interaction: ChatInputCommandInteraction) {
     return interaction.reply({ content: "Użyj na serwerze.", ephemeral: true });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
@@ -159,7 +160,7 @@ async function handleSetupTickets(interaction: ChatInputCommandInteraction) {
 
 async function handleListRoles(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId) return;
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const roles = await getManagerRoles(interaction.guildId);
   if (!roles.length) return interaction.editReply("Brak skonfigurowanych ról managerów.");
   return interaction.editReply(`📋 Role obsługujące tickety:\n${roles.map(id => `<@&${id}>`).join("\n")}`);
@@ -167,7 +168,7 @@ async function handleListRoles(interaction: ChatInputCommandInteraction) {
 
 async function handleAddRole(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId) return;
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const member = await interaction.guild!.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
@@ -229,7 +230,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
     return interaction.reply({ content: "Użyj na serwerze.", ephemeral: true });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   // sprawdź czy user już ma otwarty
   const existing = await prisma.ticket.findFirst({
@@ -315,7 +316,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
 async function handleCloseTicket(interaction: ButtonInteraction) {
   if (!interaction.guildId) return;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const channelId = interaction.channelId;
   const ticket = await prisma.ticket.findFirst({ where: { channelId } });
