@@ -35,7 +35,11 @@ function parseRoleIds(raw: unknown): string[] {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) return arr.filter(Boolean);
     } catch {
-      if ((raw as string).includes(",")) return (raw as string).split(",").map(s => s.trim()).filter(Boolean);
+      if ((raw as string).includes(","))
+        return (raw as string)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
     }
   }
   return [];
@@ -109,7 +113,9 @@ function buildCloseReasonModal() {
     .setRequired(true)
     .setMaxLength(1000);
 
-  return modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(reason));
+  return modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(reason)
+  );
 }
 
 /* -------------------------- client -------------------------- */
@@ -131,26 +137,37 @@ export function createClient() {
 
   client.on("interactionCreate", async (interaction) => {
     try {
-      if (interaction.isChatInputCommand() && interaction.commandName === "tickets") {
+      if (
+        interaction.isChatInputCommand() &&
+        interaction.commandName === "tickets"
+      ) {
         const sub = interaction.options.getSubcommand();
         if (sub === "setup-panel") return handleSetupTickets(interaction);
-        if (sub === "add-role")     return handleAddRole(interaction);
-        if (sub === "remove-role")  return handleRemoveRole(interaction);
-        if (sub === "list-roles")   return handleListRoles(interaction);
+        if (sub === "add-role") return handleAddRole(interaction);
+        if (sub === "remove-role") return handleRemoveRole(interaction);
+        if (sub === "list-roles") return handleListRoles(interaction);
       } else if (interaction.isButton()) {
-        if (interaction.customId === BUTTON_OPEN_ID)        return handleOpenTicket(interaction);
-        if (interaction.customId === BUTTON_CLOSE_NOP_ID)   return handleCloseTicket(interaction, { withReason: false });
-        if (interaction.customId === BUTTON_CLOSE_WITH_ID)  return handleOpenCloseReasonModal(interaction);
-      } else if (interaction.isModalSubmit() && interaction.customId === MODAL_CLOSE_REASON_ID) {
+        if (interaction.customId === BUTTON_OPEN_ID)
+          return handleOpenTicket(interaction);
+        if (interaction.customId === BUTTON_CLOSE_NOP_ID)
+          return handleCloseTicket(interaction, { withReason: false });
+        if (interaction.customId === BUTTON_CLOSE_WITH_ID)
+          return handleOpenCloseReasonModal(interaction);
+      } else if (
+        interaction.isModalSubmit() &&
+        interaction.customId === MODAL_CLOSE_REASON_ID
+      ) {
         return handleCloseTicketWithReason(interaction);
       }
     } catch (err) {
       console.error(err);
       if (interaction.isRepliable()) {
-        await interaction.reply({
-          content: "Wystąpił błąd podczas przetwarzania interakcji.",
-          ephemeral: true,
-        }).catch(() => {});
+        await interaction
+          .reply({
+            content: "Wystąpił błąd podczas przetwarzania interakcji.",
+            ephemeral: true,
+          })
+          .catch(() => {});
       }
     }
   });
@@ -169,12 +186,18 @@ async function handleSetupTickets(interaction: ChatInputCommandInteraction) {
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
-    return interaction.editReply("Nie masz uprawnień do skonfigurowania systemu ticketów.");
+    return interaction.editReply(
+      "Nie masz uprawnień do skonfigurowania systemu ticketów."
+    );
   }
 
-  const ch = await interaction.guild.channels.fetch(CFG.discord.panelChannelId).catch(() => null);
+  const ch = await interaction.guild.channels
+    .fetch(CFG.discord.panelChannelId)
+    .catch(() => null);
   if (!ch || ch.type !== ChannelType.GuildText) {
-    return interaction.editReply("Nieprawidłowy PANEL_CHANNEL_ID (to nie jest kanał tekstowy).");
+    return interaction.editReply(
+      "Nieprawidłowy PANEL_CHANNEL_ID (to nie jest kanał tekstowy)."
+    );
   }
 
   const me = interaction.guild.members.me;
@@ -185,9 +208,11 @@ async function handleSetupTickets(interaction: ChatInputCommandInteraction) {
     PermissionFlagsBits.EmbedLinks,
     PermissionFlagsBits.AttachFiles,
   ];
-  const missing = needed.filter(p => !perms?.has(p));
+  const missing = needed.filter((p) => !perms?.has(p));
   if (missing.length) {
-    return interaction.editReply("Bot nie ma uprawnień do kanału panelu (wymagane: ViewChannel, SendMessages, EmbedLinks, AttachFiles).");
+    return interaction.editReply(
+      "Bot nie ma uprawnień do kanału panelu (wymagane: ViewChannel, SendMessages, EmbedLinks, AttachFiles)."
+    );
   }
 
   await (ch as TextChannel).send({
@@ -202,8 +227,11 @@ async function handleListRoles(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const roles = await getManagerRoles(interaction.guildId);
-  if (!roles.length) return interaction.editReply("Brak skonfigurowanych ról managerów.");
-  return interaction.editReply(`📋 Role obsługujące tickety:\n${roles.map(id => `<@&${id}>`).join("\n")}`);
+  if (!roles.length)
+    return interaction.editReply("Brak skonfigurowanych ról managerów.");
+  return interaction.editReply(
+    `📋 Role obsługujące tickety:\n${roles.map((id) => `<@&${id}>`).join("\n")}`
+  );
 }
 
 async function handleAddRole(interaction: ChatInputCommandInteraction) {
@@ -311,7 +339,10 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
   const managerRoles = await getManagerRoles(interaction.guildId);
 
   const overwrites: OverwriteResolvable[] = [
-    { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    {
+      id: interaction.guild.roles.everyone.id,
+      deny: [PermissionFlagsBits.ViewChannel],
+    },
     ...managerRoles.map((roleId) => ({
       id: roleId,
       allow: [
@@ -342,9 +373,13 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
   });
 
   // ⇩ nazwa autora zapisywana w DB (nick na serwerze > globalna > username)
-  const openerMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  const openerMember = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
   const openerName =
-    openerMember?.displayName || interaction.user.globalName || interaction.user.username;
+    openerMember?.displayName ||
+    interaction.user.globalName ||
+    interaction.user.username;
 
   const ticket = await prisma.ticket.create({
     data: {
@@ -359,7 +394,9 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
   await (channel as TextChannel).send({
     content:
       `👋 Witaj <@${interaction.user.id}>! To jest Twój ticket **#${ticket.number}**.\n` +
-      `Obsługą zajmą się: ${managerRoles.map((id) => `<@&${id}>`).join(", ")}\n\n` +
+      `Obsługą zajmą się: ${managerRoles
+        .map((id) => `<@&${id}>`)
+        .join(", ")}\n\n` +
       `Gdy sprawa zakończona, użyj jednego z przycisków poniżej:`,
     components: [buildCloseRow()],
   });
@@ -373,12 +410,18 @@ async function handleOpenCloseReasonModal(interaction: ButtonInteraction) {
   if (!interaction.guildId) return;
   const member = await interaction.guild!.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
-    return interaction.reply({ content: "Nie masz uprawnień do zamknięcia ticketu.", ephemeral: true });
+    return interaction.reply({
+      content: "Nie masz uprawnień do zamknięcia ticketu.",
+      ephemeral: true,
+    });
   }
   await interaction.showModal(buildCloseReasonModal());
 }
 
-async function handleCloseTicket(interaction: ButtonInteraction, opts: { withReason: boolean }) {
+async function handleCloseTicket(
+  interaction: ButtonInteraction,
+  opts: { withReason: boolean }
+) {
   if (!interaction.guildId) return;
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -386,21 +429,33 @@ async function handleCloseTicket(interaction: ButtonInteraction, opts: { withRea
   const channelId = interaction.channelId;
   const ticket = await prisma.ticket.findFirst({ where: { channelId } });
   if (!ticket || ticket.status === "CLOSED") {
-    return interaction.editReply("Ten ticket jest już zamknięty lub nie istnieje w DB.");
+    return interaction.editReply(
+      "Ten ticket jest już zamknięty lub nie istnieje w DB."
+    );
   }
 
   // tylko whitelist – autor NIE może zamykać
   const member = await interaction.guild!.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
-    return interaction.editReply("Nie masz uprawnień do zamknięcia tego ticketu.");
+    return interaction.editReply(
+      "Nie masz uprawnień do zamknięcia tego ticketu."
+    );
   }
 
   const reason = opts.withReason ? "(brak powodu)" : undefined;
-  await doCloseFlow({ interaction, ticketId: ticket.id, channelId, closerId: interaction.user.id, reason });
+  await doCloseFlow({
+    interaction,
+    ticketId: ticket.id,
+    channelId,
+    closerId: interaction.user.id,
+    reason,
+  });
   await interaction.editReply("✅ Zamknięto ticket.");
 }
 
-async function handleCloseTicketWithReason(interaction: ModalSubmitInteraction) {
+async function handleCloseTicketWithReason(
+  interaction: ModalSubmitInteraction
+) {
   if (!interaction.guildId) return;
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -408,16 +463,27 @@ async function handleCloseTicketWithReason(interaction: ModalSubmitInteraction) 
   const channelId = interaction.channelId;
   const ticket = await prisma.ticket.findFirst({ where: { channelId } });
   if (!ticket || ticket.status === "CLOSED") {
-    return interaction.editReply("Ten ticket jest już zamknięty lub nie istnieje w DB.");
+    return interaction.editReply(
+      "Ten ticket jest już zamknięty lub nie istnieje w DB."
+    );
   }
 
   const member = await interaction.guild!.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
-    return interaction.editReply("Nie masz uprawnień do zamknięcia tego ticketu.");
+    return interaction.editReply(
+      "Nie masz uprawnień do zamknięcia tego ticketu."
+    );
   }
 
-  const reason = interaction.fields.getTextInputValue("reason")?.trim() || "(brak powodu)";
-  await doCloseFlow({ interaction, ticketId: ticket.id, channelId, closerId: interaction.user.id, reason });
+  const reason =
+    interaction.fields.getTextInputValue("reason")?.trim() || "(brak powodu)";
+  await doCloseFlow({
+    interaction,
+    ticketId: ticket.id,
+    channelId,
+    closerId: interaction.user.id,
+    reason,
+  });
   await interaction.editReply("✅ Zamknięto ticket (z powodem).");
 }
 
@@ -432,16 +498,23 @@ async function doCloseFlow(args: {
 }) {
   const { interaction, ticketId, channelId, closerId, reason } = args;
 
-  const channel = interaction.guild!.channels.cache.get(channelId) as TextChannel;
+  const channel = interaction.guild!.channels.cache.get(
+    channelId
+  ) as TextChannel;
 
   // 1) zbierz wiadomości i wyrenderuj HTML
   const messages = await fetchAllMessages(channel, 1000);
   const html = renderTranscriptHtml(messages);
 
   // ⇩ nazwa zamykającego
-  const closerMember = await interaction.guild!.members.fetch(closerId).catch(() => null);
+  const closerMember = await interaction
+    .guild!.members.fetch(closerId)
+    .catch(() => null);
   const closedByName =
-    closerMember?.displayName || closerMember?.user?.globalName || closerMember?.user?.username || "Moderator";
+    closerMember?.displayName ||
+    closerMember?.user?.globalName ||
+    closerMember?.user?.username ||
+    "Moderator";
 
   // 2) zapisz transcript + update ticketu (z nazwami)
   await prisma.$transaction([
@@ -465,14 +538,22 @@ async function doCloseFlow(args: {
   // 3) zablokuj pisanie autorowi, zmień nazwę, napisz info
   const t = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!t) return;
-  await channel.permissionOverwrites.edit(t.openerId, { SendMessages: false }).catch(() => {});
-  await channel.setName(`closed-${(t.number ?? 0).toString().padStart(4, "0")}`).catch(() => {});
+  await channel.permissionOverwrites
+    .edit(t.openerId, { SendMessages: false })
+    .catch(() => {});
+  await channel
+    .setName(`closed-${(t.number ?? 0).toString().padStart(4, "0")}`)
+    .catch(() => {});
   await channel.send("🔒 Ticket zamknięty. Transkrypcja zapisana.");
 
   // 4) DM do autora i zamykającego
   const url = `${CFG.http.baseUrl}/ticket/${t.id}`;
-  const openerUser = await interaction.client.users.fetch(t.openerId).catch(() => null);
-  const closerUser = await interaction.client.users.fetch(closerId).catch(() => null);
+  const openerUser = await interaction.client.users
+    .fetch(t.openerId)
+    .catch(() => null);
+  const closerUser = await interaction.client.users
+    .fetch(closerId)
+    .catch(() => null);
 
   const authorMsg = reason
     ? `Twój ticket #${t.number} został zamknięty.\nPowód: ${reason}\nHistoria: ${url}`
@@ -486,7 +567,9 @@ async function doCloseFlow(args: {
   if (closerUser) await closerUser.send(closerMsg).catch(() => {});
 
   // 5) usuń kanał
-  await channel.delete("Ticket zamknięty – usuwam kanał po archiwizacji.").catch(() => {});
+  await channel
+    .delete("Ticket zamknięty – usuwam kanał po archiwizacji.")
+    .catch(() => {});
 }
 
 /* -------------------------- transcript utils -------------------------- */
@@ -496,7 +579,10 @@ async function fetchAllMessages(channel: TextChannel, max: number) {
   let before: string | undefined = undefined;
 
   while (all.length < max) {
-    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    const batch = await channel.messages.fetch({
+      limit: 100,
+      ...(before ? { before } : {}),
+    });
     if (batch.size === 0) break;
     const arr = Array.from(batch.values());
     all.push(...arr);
@@ -508,23 +594,32 @@ async function fetchAllMessages(channel: TextChannel, max: number) {
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]!));
+  return s.replace(
+    /[&<>"']/g,
+    (m) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
+        m
+      ]!)
+  );
 }
 
 // Tailwindowy renderer wiadomości: polskie daty, brak ID, bez <pre> (zawijanie)
 function renderTranscriptHtml(messages: any[]): string {
   return messages
-    .map(m => {
+    .map((m) => {
       const time = fmtPL(m.createdTimestamp);
       const who = escapeHtml(displayNameOf(m));
       const content = m.content ? escapeHtml(m.content) : "";
       const attachments = Array.from(m.attachments?.values?.() || []);
       const attachmentsHtml = attachments.length
-        ? `<div class="mt-2 text-sm text-gray-800">Załączniki: ${
-            attachments
-              .map((a: any) => `<a class="underline hover:text-flame" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`)
-              .join(", ")
-          }</div>`
+        ? `<div class="mt-2 text-sm text-gray-800">Załączniki: ${attachments
+            .map(
+              (a: any) =>
+                `<a class="underline hover:text-flame" href="${escapeHtml(
+                  a.url
+                )}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`
+            )
+            .join(", ")}</div>`
         : "";
 
       return `
@@ -537,7 +632,9 @@ function renderTranscriptHtml(messages: any[]): string {
       </div>
       <div class="message-bubble mt-1 rounded-xl border border-orange-100 bg-orange-50/40 p-3 shadow-sm">
         <div class="message-content" style="white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;">
-          ${content || '<span class="text-gray-500 italic">(brak treści)</span>'}
+          ${
+            content || '<span class="text-gray-500 italic">(brak treści)</span>'
+          }
         </div>
         ${attachmentsHtml}
       </div>
