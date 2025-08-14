@@ -19,12 +19,11 @@ model Ticket {
   closedById   String?
   closeReason  String?
 
-  // DODAJ TE DWA POLA:
-  openerName   String?       // nazwa wyświetlana autora
-  closedByName String?       // nazwa wyświetlana zamykającego
+  // ⇩ NOWE
+  openerName    String?   // np. nick na serwerze w momencie utworzenia
+  closedByName  String?   // nick zamykającego w momencie zamknięcia
 
   transcript   TicketTranscript?
-  @@index([guildId, status])
 }
 
 model TicketTranscript {

@@ -12,121 +12,359 @@
       theme: {
         extend: {
           colors: {
-            flame: '#ff7a18', /* minecraftowy „flame” */
+            flame: '#ff7a18',
+            glass: 'rgba(255, 255, 255, 0.25)',
+            'glass-border': 'rgba(255, 255, 255, 0.18)',
           },
-          boxShadow: {
-            soft: '0 10px 30px -12px rgba(0,0,0,.12)',
+          backdropBlur: {
+            xs: '2px',
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.8s ease-out',
+            'slide-up': 'slideUp 0.6s ease-out',
+            'scale-in': 'scaleIn 0.4s ease-out',
+            'float': 'float 6s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(20px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' }
+            },
+            slideUp: {
+              '0%': { opacity: '0', transform: 'translateY(30px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' }
+            },
+            scaleIn: {
+              '0%': { opacity: '0', transform: 'scale(0.9)' },
+              '100%': { opacity: '1', transform: 'scale(1)' }
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-10px)' }
+            }
           }
         }
       }
     }
   </script>
 
-  <!-- Drobne style do legacy znaczników z transkryptu (.msg itd.) -->
   <style>
-    :root { color-scheme: light; }
-    .legacy .msg { padding: 12px 16px; border-bottom: 1px solid rgb(229 231 235); }
-    .legacy .meta, .legacy .time { color: rgb(107 114 128); font-size: 12px; }
-    .legacy .who { font-weight: 600; }
-    .legacy .content pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0 0; }
-    .legacy a { color: rgb(17 24 39); text-decoration: underline; }
-
-  .message-content {
-    white-space: pre-wrap; /* zachowuje nowe linie, ale łamie długie słowa */
-    word-break: break-word; /* łamanie długich wyrazów/linków */
-  }
-  .attachments a {
-    color: #d97706; /* pomarańcz Minecraft */
-    text-decoration: underline;
-  }
+    :root { 
+      color-scheme: light; 
+      scroll-behavior: smooth;
+    }
+    
+    /* Glass morphism background */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .glass-header {
+      background: linear-gradient(135deg, rgba(255, 122, 24, 0.9), rgba(251, 146, 60, 0.9));
+      backdrop-filter: blur(20px);
+    }
+    
+    /* Simplified message styling - removed complex hover effects */
+    .message-bubble {
+      transition: all 0.3s ease;
+    }
+    
+    .message-bubble:hover {
+      background: rgba(255, 122, 24, 0.05);
+    }
+    
+    .message-content {
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.7;
+    }
+    
+    .attachments a {
+      color: #ea580c;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+    
+    .attachments a:hover {
+      color: #c2410c;
+    }
+    
+    /* Status badge with glow effect */
+    .status-glow {
+      box-shadow: 0 0 20px rgba(255, 122, 24, 0.3);
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(255, 122, 24, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(255, 122, 24, 0.5); }
+    }
+    
+    /* Custom scrollbar with gradient */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: linear-gradient(180deg, #f1f5f9, #e2e8f0);
+      border-radius: 4px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #ff7a18, #ea580c);
+      border-radius: 4px;
+      transition: all 0.3s ease;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, #ea580c, #c2410c);
+    }
+    
+    /* Floating elements */
+    .float-element {
+      animation: float 6s ease-in-out infinite;
+    }
+    
+    /* Print styles */
+    @media print {
+      .no-print { display: none !important; }
+      .glass-header { background: #ff7a18 !important; }
+      .glass-card { background: white !important; backdrop-filter: none !important; }
+      .shadow-2xl { box-shadow: none !important; }
+    }
+    
+    /* Simplified legacy message styling */
+    .legacy .msg { 
+      padding: 1.5rem; 
+      border-bottom: 1px solid rgba(255, 122, 24, 0.1);
+      transition: background 0.3s ease;
+    }
+    
+    .legacy .msg:hover {
+      background: rgba(255, 122, 24, 0.02);
+    }
+    
+    .legacy .meta, .legacy .time { 
+      color: #64748b; 
+      font-size: 0.875rem; 
+      font-weight: 500;
+    }
+    
+    .legacy .who { 
+      font-weight: 700; 
+      color: #1e293b;
+      font-size: 1rem;
+    }
+    
+    .legacy .content pre { 
+      white-space: pre-wrap; 
+      word-break: break-word; 
+      margin: 0.75rem 0 0 0;
+      background: rgba(255, 122, 24, 0.05);
+      padding: 1rem;
+      border-radius: 0.75rem;
+      border-left: 4px solid #ff7a18;
+    }
+    
+    .legacy a { 
+      color: #ea580c; 
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.3s ease;
+    }
+    
+    .legacy a:hover {
+      color: #c2410c;
+    }
   </style>
 </head>
 
-<body class="bg-white text-black antialiased">
-  <div class="min-h-screen bg-gradient-to-b from-white to-orange-50/40">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      
-      <!-- Nagłówek -->
-      <header class="mb-6">
-        <div class="flex items-center gap-3">
-          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-flame to-orange-400 shadow-soft"></div>
-          <div>
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">
-              Ticket #<%= ticket.number %>
-            </h1>
-            <p class="text-sm text-gray-600">
-              Utworzony:
-              <%= new Date(ticket.createdAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %>
-            </p>
-          </div>
-        </div>
-      </header>
+<body class="bg-gradient-to-br from-orange-50 via-white to-amber-50 text-gray-900 antialiased min-h-screen">
+  <!-- Floating background elements -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-gradient-to-r from-orange-200/20 to-amber-200/20 rounded-full blur-3xl float-element"></div>
+    <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-gradient-to-r from-flame/10 to-orange-300/10 rounded-full blur-3xl float-element" style="animation-delay: -3s;"></div>
+  </div>
 
-      <!-- Karta meta -->
-      <section class="bg-white rounded-2xl shadow-soft border border-orange-100 overflow-hidden mb-6">
-        <div class="border-l-4 border-flame p-5 sm:p-6">
-          <div class="flex flex-wrap items-center gap-2 mb-3">
-            <span class="inline-flex items-center gap-1 rounded-full border border-flame/40 bg-orange-50 px-3 py-1 text-xs font-medium text-flame">
-              <span class="h-1.5 w-1.5 rounded-full bg-flame"></span>
-              <%= ticket.status %>
-            </span>
-
-            <% if (ticket.closedAt) { %>
-              <span class="text-sm text-gray-700">
-                Zamknięty:
-                <b><%= new Date(ticket.closedAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %></b>
-              </span>
-            <% } %>
-          </div>
-
-          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-800">
-            <div class="flex items-center gap-2">
-              <dt class="font-semibold text-gray-900">Autor:</dt>
-              <dd><code class="bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200"><%= ticket.openerId %></code></dd>
+  <div class="relative z-10 min-h-screen">
+    <!-- Enhanced Header -->
+    <header class="glass-header text-white py-12 mb-8 animate-fade-in">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-6">
+            <div class="h-20 w-20 rounded-3xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-2xl float-element">
+              <svg class="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path>
+              </svg>
             </div>
-            <% if (ticket.closedById) { %>
-            <div class="flex items-center gap-2">
-              <dt class="font-semibold text-gray-900">Zamknął:</dt>
-              <dd><code class="bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200"><%= ticket.closedById %></code></dd>
-            </div>
-            <% } %>
-          </dl>
-
-          <% if (ticket.closeReason) { %>
-            <div class="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
-              <p class="text-sm text-gray-900">
-                <span class="font-semibold text-flame">Powód zamknięcia:</span>
-                <%= ticket.closeReason %>
+            <div>
+              <h1 class="text-4xl sm:text-5xl font-bold tracking-tight mb-2">
+                Ticket #<%= ticket.number %>
+              </h1>
+              <p class="text-white/90 text-xl font-medium">
+                System Ticketów BLOCZEKMC.PL
+              </p>
+              <p class="text-white/70 text-sm mt-1">
+                Utworzony: <%= new Date(ticket.createdAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %>
               </p>
             </div>
+          </div>
+          
+          <div class="no-print flex space-x-4">
+            <button onclick="window.print()" class="group bg-white/20 hover:bg-white/30 backdrop-blur-sm px-6 py-3 rounded-xl transition-all duration-300 flex items-center space-x-3 shadow-lg hover:shadow-xl hover:scale-105">
+              <svg class="h-6 w-6 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+              </svg>
+              <span class="font-semibold">Drukuj</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+      
+      <!-- Enhanced Ticket Info Card -->
+      <div class="glass-card rounded-3xl shadow-2xl overflow-hidden mb-8 animate-slide-up">
+        <div class="bg-gradient-to-r from-orange-50 to-amber-50 px-8 py-6 border-b border-orange-100">
+          <div class="flex flex-wrap items-center justify-between gap-6">
+            <div class="flex items-center space-x-6">
+              <% 
+                let statusColor = 'bg-gray-100 text-gray-800 border-gray-300';
+                let statusIcon = '●';
+                let glowClass = '';
+                if (ticket.status === 'open' || ticket.status === 'otwarty') {
+                  statusColor = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                  statusIcon = '●';
+                  glowClass = 'shadow-emerald-200';
+                } else if (ticket.status === 'closed' || ticket.status === 'zamknięty') {
+                  statusColor = 'bg-red-100 text-red-800 border-red-300';
+                  statusIcon = '✓';
+                  glowClass = 'shadow-red-200';
+                } else if (ticket.status === 'pending' || ticket.status === 'oczekujący') {
+                  statusColor = 'bg-amber-100 text-amber-800 border-amber-300';
+                  statusIcon = '⏳';
+                  glowClass = 'shadow-amber-200';
+                }
+              %>
+              <div class="status-glow inline-flex items-center gap-3 px-6 py-3 rounded-2xl text-lg font-bold border-2 <%= statusColor %> <%= glowClass %> animate-scale-in">
+                <span class="text-2xl leading-none"><%= statusIcon %></span>
+                <%= ticket.status %>
+              </div>
+            </div>
+            
+            <% if (ticket.closedAt) { %>
+            <div class="bg-white/60 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/40">
+              <p class="text-sm font-medium text-gray-600">Zamknięty</p>
+              <time class="text-lg font-bold text-gray-900 font-mono">
+                <%= new Date(ticket.closedAt).toLocaleString('pl-PL', { 
+                  timeZone: 'Europe/Warsaw',
+                  dateStyle: 'short',
+                  timeStyle: 'short'
+                }) %>
+              </time>
+            </div>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="p-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+            <!-- Autor -->
+            <div class="flex items-center space-x-4 p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
+              <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                <%= ticket.openerId.charAt(0).toUpperCase() %>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-blue-600 uppercase tracking-wide">Autor ticketu</p>
+                <p class="text-xl font-mono font-bold text-gray-900 bg-white px-3 py-1 rounded-lg shadow-sm"><%= ticket.openerId %></p>
+              </div>
+            </div>
+
+            <% if (ticket.closedById) { %>
+            <!-- Zamknął -->
+            <div class="flex items-center space-x-4 p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-100">
+              <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                <%= ticket.closedById.charAt(0).toUpperCase() %>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-purple-600 uppercase tracking-wide">Zamknął ticket</p>
+                <p class="text-xl font-mono font-bold text-gray-900 bg-white px-3 py-1 rounded-lg shadow-sm"><%= ticket.closedById %></p>
+              </div>
+            </div>
+            <% } %>
+
+            <!-- Removed duration element completely -->
+          </div>
+
+          <% if (ticket.closeReason) { %>
+          <div class="mt-8 p-6 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-2xl shadow-lg animate-scale-in">
+            <div class="flex items-start space-x-4">
+              <div class="flex-shrink-0 h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg">
+                <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-xl font-bold text-amber-900 mb-3">Powód zamknięcia</h3>
+                <p class="text-amber-800 leading-relaxed text-lg"><%= ticket.closeReason %></p>
+              </div>
+            </div>
+          </div>
           <% } %>
         </div>
-      </section>
+      </div>
 
-      <!-- Transkrypcja -->
-      <section class="bg-white rounded-2xl shadow-soft border border-orange-100">
-        <div class="px-4 sm:px-6 py-4 border-b border-orange-100 flex items-center justify-between">
-          <h2 class="text-lg font-semibold">Historia rozmowy</h2>
-          <a
-            href="<%= baseUrl %>/ticket/<%= ticket.id %>"
-            class="inline-flex items-center gap-2 text-sm font-medium text-flame hover:text-orange-500 transition"
-            title="Bezpośredni link"
-          >
-            Link do tej strony
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M12.586 4H9a1 1 0 100 2h1.586L7.293 9.293a1 1 0 101.414 1.414L12 7.414V9a1 1 0 102 0V5a1 1 0 00-1-1h-4z"/><path d="M5 6a3 3 0 00-3 3v5a3 3 0 003 3h5a3 3 0 003-3v-1a1 1 0 10-2 0v1a1 1 0 01-1 1H5a1 1 0 01-1-1V9a1 1 0 011-1h1a1 1 0 100-2H5z"/></svg>
-          </a>
+      <!-- Enhanced Messages Section -->
+      <div class="glass-card rounded-3xl shadow-2xl overflow-hidden animate-slide-up" style="animation-delay: 0.2s;">
+        <div class="bg-gradient-to-r from-slate-50 to-gray-50 px-8 py-6 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+              <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-500 to-gray-600 flex items-center justify-center shadow-lg">
+                <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+              </div>
+              <div>
+                <h2 class="text-2xl font-bold text-gray-900">Historia rozmowy</h2>
+                <p class="text-gray-600 font-medium">Pełna transkrypcja komunikacji</p>
+              </div>
+            </div>
+            
+            <div class="no-print">
+              <a
+                href="<%= baseUrl %>/ticket/<%= ticket.id %>"
+                class="group inline-flex items-center space-x-3 px-6 py-3 bg-orange-300 to-orange-500 text-black font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                title="Bezpośredni link do ticketu"
+              >
+                <span>Bezpośredni link</span>
+                <svg class="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+              </a>
+            </div>
+          </div>
         </div>
 
-        <!-- Wstrzyknięta treść transkrypcji (legacy mark-up) -->
-        <div class="legacy divide-y divide-orange-100">
-          <%- transcriptHtml %>
+        <div class="max-h-[600px] overflow-y-auto custom-scrollbar">
+          <div class="legacy">
+            <%- transcriptHtml %>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <!-- Stopka -->
-      <footer class="text-center text-xs text-gray-500 mt-6">
-        Wygenerowano:
-        <%= new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %>
+      <!-- Enhanced Footer -->
+      <footer class="mt-12 text-center animate-fade-in" style="animation-delay: 0.4s;">
+        <div class="inline-flex items-center space-x-3 text-sm text-gray-600 glass-card px-6 py-4 rounded-2xl shadow-lg">
+          <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-flame to-orange-500 flex items-center justify-center">
+            <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <span class="font-semibold">Wygenerowano: <%= new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %></span>
+        </div>
       </footer>
     </div>
   </div>

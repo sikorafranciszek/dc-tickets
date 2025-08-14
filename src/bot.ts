@@ -15,6 +15,7 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  ModalSubmitInteraction,
   type OverwriteResolvable,
 } from "discord.js";
 import { prisma } from "./prisma";
@@ -64,7 +65,6 @@ function fmtPL(dateLike: number | Date) {
 }
 
 function displayNameOf(m: any): string {
-  // priorytet: nazwa na serwerze -> globalna -> username
   return (
     m?.member?.displayName ||
     m?.author?.globalName ||
@@ -122,6 +122,7 @@ export function createClient() {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMembers,
     ],
+    partials: [Partials.Channel],
   });
 
   client.once("ready", () => {
@@ -340,7 +341,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
     permissionOverwrites: overwrites,
   });
 
-  // ustal nazwę wyświetlaną autora
+  // ⇩ nazwa autora zapisywana w DB (nick na serwerze > globalna > username)
   const openerMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   const openerName =
     openerMember?.displayName || interaction.user.globalName || interaction.user.username;
@@ -351,7 +352,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
       guildId: interaction.guildId,
       channelId: channel.id,
       openerId: interaction.user.id,
-      openerName, // <— zapisz nazwę, żeby nie pokazywać ID na stronie
+      openerName, // << zapisz
     },
   });
 
@@ -399,7 +400,7 @@ async function handleCloseTicket(interaction: ButtonInteraction, opts: { withRea
   await interaction.editReply("✅ Zamknięto ticket.");
 }
 
-async function handleCloseTicketWithReason(interaction: any /* ModalSubmitInteraction */) {
+async function handleCloseTicketWithReason(interaction: ModalSubmitInteraction) {
   if (!interaction.guildId) return;
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -423,7 +424,7 @@ async function handleCloseTicketWithReason(interaction: any /* ModalSubmitIntera
 /* -------------------------- core close flow -------------------------- */
 
 async function doCloseFlow(args: {
-  interaction: ButtonInteraction | any;
+  interaction: ButtonInteraction | ModalSubmitInteraction;
   ticketId: string;
   channelId: string;
   closerId: string;
@@ -433,16 +434,16 @@ async function doCloseFlow(args: {
 
   const channel = interaction.guild!.channels.cache.get(channelId) as TextChannel;
 
-  // 1) zbierz wiadomości i wyrenderuj HTML (PL strefa i ładny wygląd)
+  // 1) zbierz wiadomości i wyrenderuj HTML
   const messages = await fetchAllMessages(channel, 1000);
   const html = renderTranscriptHtml(messages);
 
-  // ustal nazwę zamykającego
+  // ⇩ nazwa zamykającego
   const closerMember = await interaction.guild!.members.fetch(closerId).catch(() => null);
   const closedByName =
     closerMember?.displayName || closerMember?.user?.globalName || closerMember?.user?.username || "Moderator";
 
-  // 2) zapisz transcript i update ticketu (+ zamykający z nazwą)
+  // 2) zapisz transcript + update ticketu (z nazwami)
   await prisma.$transaction([
     prisma.ticketTranscript.upsert({
       where: { ticketId },
@@ -455,7 +456,7 @@ async function doCloseFlow(args: {
         status: "CLOSED",
         closedAt: new Date(),
         closedById: closerId,
-        closedByName, // <— zapisz nazwę zamykającego
+        closedByName, // << zapisz
         closeReason: reason,
       },
     }),
@@ -468,7 +469,7 @@ async function doCloseFlow(args: {
   await channel.setName(`closed-${(t.number ?? 0).toString().padStart(4, "0")}`).catch(() => {});
   await channel.send("🔒 Ticket zamknięty. Transkrypcja zapisana.");
 
-  // 4) DM do autora i zamykającego (link publiczny)
+  // 4) DM do autora i zamykającego
   const url = `${CFG.http.baseUrl}/ticket/${t.id}`;
   const openerUser = await interaction.client.users.fetch(t.openerId).catch(() => null);
   const closerUser = await interaction.client.users.fetch(closerId).catch(() => null);
@@ -510,44 +511,39 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]!));
 }
 
-// Tailwindowy renderer wiadomości: bańki, polskie daty, brak ID
+// Tailwindowy renderer wiadomości: polskie daty, brak ID, bez <pre> (zawijanie)
 function renderTranscriptHtml(messages: any[]): string {
-  const rows = messages.map(m => {
-    const time = new Date(m.createdTimestamp).toLocaleString("pl-PL", {
-      timeZone: "Europe/Warsaw",
-      dateStyle: "short",
-      timeStyle: "medium",
-    });
+  return messages
+    .map(m => {
+      const time = fmtPL(m.createdTimestamp);
+      const who = escapeHtml(displayNameOf(m));
+      const content = m.content ? escapeHtml(m.content) : "";
+      const attachments = Array.from(m.attachments?.values?.() || []);
+      const attachmentsHtml = attachments.length
+        ? `<div class="mt-2 text-sm text-gray-800">Załączniki: ${
+            attachments
+              .map((a: any) => `<a class="underline hover:text-flame" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`)
+              .join(", ")
+          }</div>`
+        : "";
 
-    const author = m.author
-      ? `${escapeHtml(m.author.globalName || m.author.username)}`
-      : "Nieznany użytkownik";
-
-    const content = m.content ? escapeHtml(m.content) : "";
-    const attachments = Array.from(m.attachments?.values?.() || []);
-
-    const parts: string[] = [];
-    if (content) {
-      parts.push(
-        `<div class="message-content">${content}</div>`
-      );
-    }
-    if (attachments.length) {
-      parts.push(
-        `<div class="attachments">Załączniki: ${attachments
-          .map((a: any) => `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`)
-          .join(", ")}</div>`
-      );
-    }
-
-    return `
-      <div class="msg">
-        <span class="who font-semibold">${author}</span>
-        <span class="time text-gray-500 text-sm ml-2">— ${time}</span>
-        <div class="content">${parts.join("") || "<i>(brak treści)</i>"}</div>
+      return `
+<div class="px-6 py-4">
+  <div class="flex items-start gap-3">
+    <div class="flex-1">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold text-gray-900">${who}</span>
+        <span class="text-xs text-gray-500">${time}</span>
       </div>
-    `;
-  });
-  return rows.join("\n");
+      <div class="message-bubble mt-1 rounded-xl border border-orange-100 bg-orange-50/40 p-3 shadow-sm">
+        <div class="message-content" style="white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;">
+          ${content || '<span class="text-gray-500 italic">(brak treści)</span>'}
+        </div>
+        ${attachmentsHtml}
+      </div>
+    </div>
+  </div>
+</div>`;
+    })
+    .join("\n");
 }
-
