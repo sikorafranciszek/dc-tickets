@@ -225,10 +225,26 @@ async function handleRemoveRole(interaction: ChatInputCommandInteraction) {
 
 /* -------------------------- buttons -------------------------- */
 
+// Prosty rate limiter (w pamięci, resetuje się po restarcie procesu)
+const ticketRateLimit = new Map<string, number>(); // userId -> timestamp
+
 async function handleOpenTicket(interaction: ButtonInteraction) {
+
   if (!interaction.guildId || !interaction.guild) {
     return interaction.reply({ content: "Użyj na serwerze.", ephemeral: true });
   }
+
+  // --- RATE LIMIT: 1 ticket na minutę na usera ---
+  const now = Date.now();
+  const lastTicketTs = ticketRateLimit.get(interaction.user.id) || 0;
+  if (now - lastTicketTs < 60_000) {
+    const wait = Math.ceil((60_000 - (now - lastTicketTs)) / 1000);
+    return interaction.reply({
+      content: `⏳ Możesz utworzyć nowy ticket za ${wait}s.`,
+      ephemeral: true,
+    });
+  }
+  ticketRateLimit.set(interaction.user.id, now);
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -248,13 +264,13 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
   }
 
   // numeracja
-  const last = await prisma.ticket.findFirst({
+  const lastTicket = await prisma.ticket.findFirst({
     where: { guildId: interaction.guildId },
     orderBy: { number: "desc" },
     select: { number: true },
   });
 
-  const nextNumber = (last?.number ?? 0) + 1;
+  const nextNumber = (lastTicket?.number ?? 0) + 1;
   const name = `ticket-${nextNumber.toString().padStart(4, "0")}`;
 
   const managerRoles = await getManagerRoles(interaction.guildId);
