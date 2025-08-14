@@ -8,19 +8,22 @@ generator client {
 }
 
 model Ticket {
-  id          String        @id @default(cuid())
-  number      Int           @default(0)
-  guildId     String
-  channelId   String        @unique
-  openerId    String
-  status      TicketStatus  @default(OPEN)
-  createdAt   DateTime      @default(now())
-  closedAt    DateTime?
-  // NOWE:
-  closedById  String?
-  closeReason String?
-  transcript  TicketTranscript?
+  id           String        @id @default(cuid())
+  number       Int           @default(0)
+  guildId      String
+  channelId    String        @unique
+  openerId     String
+  status       TicketStatus  @default(OPEN)
+  createdAt    DateTime      @default(now())
+  closedAt     DateTime?
+  closedById   String?
+  closeReason  String?
 
+  // DODAJ TE DWA POLA:
+  openerName   String?       // nazwa wyświetlana autora
+  closedByName String?       // nazwa wyświetlana zamykającego
+
+  transcript   TicketTranscript?
   @@index([guildId, status])
 }
 
