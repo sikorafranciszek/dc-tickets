@@ -512,39 +512,42 @@ function escapeHtml(s: string): string {
 
 // Tailwindowy renderer wiadomości: bańki, polskie daty, brak ID
 function renderTranscriptHtml(messages: any[]): string {
-  return messages
-    .map(m => {
-      const time = fmtPL(m.createdTimestamp);
-      const who = escapeHtml(displayNameOf(m));
-      const content = m.content ? escapeHtml(m.content) : "";
-      const attachments = Array.from(m.attachments?.values?.() || []);
-      const attachmentsHtml = attachments.length
-        ? `<div class="mt-2 text-sm text-gray-800">Załączniki: ${
-            attachments
-              .map((a: any) => `<a class="underline hover:text-flame" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`)
-              .join(", ")
-          }</div>`
-        : "";
+  const rows = messages.map(m => {
+    const time = new Date(m.createdTimestamp).toLocaleString("pl-PL", {
+      timeZone: "Europe/Warsaw",
+      dateStyle: "short",
+      timeStyle: "medium",
+    });
 
-      const body = content
-        ? `<pre class="text-[15px] leading-6 text-gray-900">${content}</pre>`
-        : `<span class="text-gray-500 italic">(brak treści)</span>`;
+    const author = m.author
+      ? `${escapeHtml(m.author.globalName || m.author.username)}`
+      : "Nieznany użytkownik";
 
-      return `
-<div class="px-4 sm:px-6 py-3">
-  <div class="flex items-start gap-3">
-    <div class="flex-1">
-      <div class="flex items-center gap-2">
-        <span class="font-semibold text-gray-900">${who}</span>
-        <span class="text-xs text-gray-500">${time}</span>
+    const content = m.content ? escapeHtml(m.content) : "";
+    const attachments = Array.from(m.attachments?.values?.() || []);
+
+    const parts: string[] = [];
+    if (content) {
+      parts.push(
+        `<div class="message-content">${content}</div>`
+      );
+    }
+    if (attachments.length) {
+      parts.push(
+        `<div class="attachments">Załączniki: ${attachments
+          .map((a: any) => `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`)
+          .join(", ")}</div>`
+      );
+    }
+
+    return `
+      <div class="msg">
+        <span class="who font-semibold">${author}</span>
+        <span class="time text-gray-500 text-sm ml-2">— ${time}</span>
+        <div class="content">${parts.join("") || "<i>(brak treści)</i>"}</div>
       </div>
-      <div class="mt-1 rounded-xl border border-orange-100 bg-orange-50/40 p-3 shadow-sm">
-        ${body}
-        ${attachmentsHtml}
-      </div>
-    </div>
-  </div>
-</div>`;
-    })
-    .join("\n");
+    `;
+  });
+  return rows.join("\n");
 }
+
