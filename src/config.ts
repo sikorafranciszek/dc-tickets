@@ -18,8 +18,6 @@ export const CFG = {
   }
 };
 
-console.log("Konfiguracja wczytana:", CFG);
-
 for (const [k, v] of Object.entries(CFG.discord)) {
   if (!v || (Array.isArray(v) && !v.length && k !== "defaultManagerRoleIds")) {
     throw new Error(`Brak zmiennej .env dla ${k}`);
