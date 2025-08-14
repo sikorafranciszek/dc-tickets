@@ -15,7 +15,6 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  type GuildTextBasedChannel,
   type OverwriteResolvable,
 } from "discord.js";
 import { prisma } from "./prisma";
@@ -221,7 +220,7 @@ async function handleAddRole(interaction: ChatInputCommandInteraction) {
 
 async function handleRemoveRole(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId) return;
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const member = await interaction.guild!.members.fetch(interaction.user.id);
   if (!(await isManagerMember(member))) {
@@ -480,7 +479,7 @@ function escapeHtml(s: string): string {
 
 function renderTranscriptHtml(messages: any[]): string {
   const rows = messages.map(m => {
-    const time = new Date(m.createdTimestamp).toLocaleString();
+    const time = new Date(m.createdTimestamp).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
     const author = m.author ? `${escapeHtml(m.author.tag)} (${m.author.id})` : "Unknown";
     const content = m.content ? escapeHtml(m.content) : "";
     const attachments = Array.from(m.attachments?.values?.() || []);

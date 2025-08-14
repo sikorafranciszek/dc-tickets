@@ -2,36 +2,124 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Transkrypcja ticket #<%= ticket.number %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ticket #<%= ticket.number %> — transkrypcja</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            flame: '#ff7a18', /* minecraftowy „flame” */
+          },
+          boxShadow: {
+            soft: '0 10px 30px -12px rgba(0,0,0,.12)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Drobne style do legacy znaczników z transkryptu (.msg itd.) -->
   <style>
-    :root{color-scheme: light dark}
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; line-height: 1.5; }
-    header { margin-bottom: 16px; }
-    .meta { color:#666; font-size: 14px; }
-    .reason { background: rgba(0,0,0,.04); padding: 8px 12px; border-radius: 8px; }
-    .msg { padding: 10px 12px; border-bottom: 1px solid #e9e9e9; }
-    .msg .who { font-weight: 600; }
-    .msg .time { color:#777; font-size: 12px; margin-left: 8px; }
-    .content pre { white-space: pre-wrap; word-break: break-word; margin:6px 0 0 0; }
-    a { color: inherit }
+    :root { color-scheme: light; }
+    .legacy .msg { padding: 12px 16px; border-bottom: 1px solid rgb(229 231 235); }
+    .legacy .meta, .legacy .time { color: rgb(107 114 128); font-size: 12px; }
+    .legacy .who { font-weight: 600; }
+    .legacy .content pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0 0; }
+    .legacy a { color: rgb(17 24 39); text-decoration: underline; }
   </style>
 </head>
-<body>
-  <header>
-    <h1>Transkrypcja ticketu #<%= ticket.number %></h1>
-    <p class="meta">
-      Status: <b><%= ticket.status %></b>
-      <% if (ticket.closedAt) { %> (zamknięty <%= new Date(ticket.closedAt).toLocaleString() %>) <% } %><br/>
-      Autor: <code><%= ticket.openerId %></code>
-      <% if (ticket.closedById) { %> • Zamknięty przez: <code><%= ticket.closedById %></code><% } %>
-    </p>
-    <% if (ticket.closeReason) { %>
-      <p class="reason"><b>Powód zamknięcia:</b> <%= ticket.closeReason %></p>
-    <% } %>
-  </header>
 
-  <!-- wstrzykujemy zrenderowane wcześniej HTML (escape off) -->
-  <%- transcriptHtml %>
+<body class="bg-white text-black antialiased">
+  <div class="min-h-screen bg-gradient-to-b from-white to-orange-50/40">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      
+      <!-- Nagłówek -->
+      <header class="mb-6">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-flame to-orange-400 shadow-soft"></div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">
+              Ticket #<%= ticket.number %>
+            </h1>
+            <p class="text-sm text-gray-600">
+              Utworzony:
+              <%= new Date(ticket.createdAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %>
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <!-- Karta meta -->
+      <section class="bg-white rounded-2xl shadow-soft border border-orange-100 overflow-hidden mb-6">
+        <div class="border-l-4 border-flame p-5 sm:p-6">
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="inline-flex items-center gap-1 rounded-full border border-flame/40 bg-orange-50 px-3 py-1 text-xs font-medium text-flame">
+              <span class="h-1.5 w-1.5 rounded-full bg-flame"></span>
+              <%= ticket.status %>
+            </span>
+
+            <% if (ticket.closedAt) { %>
+              <span class="text-sm text-gray-700">
+                Zamknięty:
+                <b><%= new Date(ticket.closedAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %></b>
+              </span>
+            <% } %>
+          </div>
+
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-800">
+            <div class="flex items-center gap-2">
+              <dt class="font-semibold text-gray-900">Autor:</dt>
+              <dd><code class="bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200"><%= ticket.openerId %></code></dd>
+            </div>
+            <% if (ticket.closedById) { %>
+            <div class="flex items-center gap-2">
+              <dt class="font-semibold text-gray-900">Zamknął:</dt>
+              <dd><code class="bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200"><%= ticket.closedById %></code></dd>
+            </div>
+            <% } %>
+          </dl>
+
+          <% if (ticket.closeReason) { %>
+            <div class="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+              <p class="text-sm text-gray-900">
+                <span class="font-semibold text-flame">Powód zamknięcia:</span>
+                <%= ticket.closeReason %>
+              </p>
+            </div>
+          <% } %>
+        </div>
+      </section>
+
+      <!-- Transkrypcja -->
+      <section class="bg-white rounded-2xl shadow-soft border border-orange-100">
+        <div class="px-4 sm:px-6 py-4 border-b border-orange-100 flex items-center justify-between">
+          <h2 class="text-lg font-semibold">Historia rozmowy</h2>
+          <a
+            href="<%= baseUrl %>/ticket/<%= ticket.id %>"
+            class="inline-flex items-center gap-2 text-sm font-medium text-flame hover:text-orange-500 transition"
+            title="Bezpośredni link"
+          >
+            Link do tej strony
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M12.586 4H9a1 1 0 100 2h1.586L7.293 9.293a1 1 0 101.414 1.414L12 7.414V9a1 1 0 102 0V5a1 1 0 00-1-1h-4z"/><path d="M5 6a3 3 0 00-3 3v5a3 3 0 003 3h5a3 3 0 003-3v-1a1 1 0 10-2 0v1a1 1 0 01-1 1H5a1 1 0 01-1-1V9a1 1 0 011-1h1a1 1 0 100-2H5z"/></svg>
+          </a>
+        </div>
+
+        <!-- Wstrzyknięta treść transkrypcji (legacy mark-up) -->
+        <div class="legacy divide-y divide-orange-100">
+          <%- transcriptHtml %>
+        </div>
+      </section>
+
+      <!-- Stopka -->
+      <footer class="text-center text-xs text-gray-500 mt-6">
+        Wygenerowano:
+        <%= new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) %>
+      </footer>
+    </div>
+  </div>
 </body>
 </html>
