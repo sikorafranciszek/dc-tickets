@@ -20,11 +20,34 @@ import {
 } from "discord.js";
 import { prisma } from "./prisma";
 import { CFG } from "./config";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import crypto from "crypto";
+import path from "path";
 
 const BUTTON_OPEN_ID = "ticket_open_btn";
 const BUTTON_CLOSE_NOP_ID = "ticket_close_nop";
 const BUTTON_CLOSE_WITH_ID = "ticket_close_with";
 const MODAL_CLOSE_REASON_ID = "ticket_close_reason_modal";
+
+/* -------------------------- R2 client -------------------------- */
+
+const R2 = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+  },
+});
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME || "";
+const R2_PUBLIC_BASE_URL = process.env.R2_PUBLIC_BASE_URL || ""; // np. https://cdn.twojadomena.pl/tickets-assets
+
+if (!R2_BUCKET || !R2_PUBLIC_BASE_URL || !process.env.R2_ENDPOINT) {
+  console.warn(
+    "[R2] Brakuje konfiguracji ENV (R2_ENDPOINT, R2_BUCKET_NAME, R2_PUBLIC_BASE_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). Załączniki NIE będą archiwizowane."
+  );
+}
 
 /* -------------------------- helpers -------------------------- */
 
@@ -75,6 +98,33 @@ function displayNameOf(m: any): string {
     m?.author?.username ||
     "Użytkownik"
   );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (m) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
+        m
+      ]!
+  ));
+}
+
+function guessContentType(filename: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  if ([".jpg", ".jpeg"].includes(ext)) return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".pdf") return "application/pdf";
+  if (ext === ".txt") return "text/plain; charset=utf-8";
+  return "application/octet-stream";
+}
+
+function isImageContentType(ct: string) {
+  return ct?.startsWith("image/");
 }
 
 /* -------------------------- UI builders -------------------------- */
@@ -372,7 +422,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
     permissionOverwrites: overwrites,
   });
 
-  // ⇩ nazwa autora zapisywana w DB (nick na serwerze > globalna > username)
+  // nazwa autora -> DB
   const openerMember = await interaction.guild.members
     .fetch(interaction.user.id)
     .catch(() => null);
@@ -387,7 +437,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
       guildId: interaction.guildId,
       channelId: channel.id,
       openerId: interaction.user.id,
-      openerName, // << zapisz
+      openerName,
     },
   });
 
@@ -487,6 +537,76 @@ async function handleCloseTicketWithReason(
   await interaction.editReply("✅ Zamknięto ticket (z powodem).");
 }
 
+/* -------------------------- R2: upload załączników -------------------------- */
+
+type UploadedInfo = {
+  publicUrl: string;
+  contentType: string;
+  name: string;
+};
+
+async function uploadBufferToR2(key: string, buffer: Buffer, contentType: string) {
+  if (!R2_BUCKET) throw new Error("R2 not configured");
+  await R2.send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType || "application/octet-stream",
+      // Uwaga: R2 nie wspiera ACL "public-read"; dostęp publiczny konfiguruj na buckecie/CDN.
+    })
+  );
+  if (!R2_PUBLIC_BASE_URL) throw new Error("R2_PUBLIC_BASE_URL not set");
+  return `${R2_PUBLIC_BASE_URL}/${key}`;
+}
+
+async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
+  return await res.arrayBuffer();
+}
+
+/**
+ * Przechodzi po wszystkich wiadomościach i wysyła każdy attachment do R2.
+ * Zwraca mapę: oryginalnyURL -> { publicUrl, contentType, name }
+ */
+async function archiveAllAttachmentsToR2(messages: any[], ticketId: string, channelId: string) {
+  const map = new Map<string, UploadedInfo>();
+
+  // Jeśli R2 nie jest skonfigurowane – zwróć pustą mapę (zachowamy linki Discorda)
+  if (!R2_BUCKET || !process.env.R2_ENDPOINT || !R2_PUBLIC_BASE_URL) {
+    return map;
+  }
+
+  for (const m of messages) {
+    const attachments = Array.from(m.attachments?.values?.() || []);
+    for (const att of attachments) {
+      const originalUrl: string = att.url;
+      const fileName: string = att.name || "file";
+      const contentType: string = att.contentType || guessContentType(fileName);
+
+      // unikaj duplikatów
+      if (map.has(originalUrl)) continue;
+
+      try {
+        const buf = Buffer.from(await fetchArrayBuffer(originalUrl));
+        const ext = path.extname(fileName) || "";
+        const hash = crypto.randomBytes(8).toString("hex");
+        const key = `tickets/${ticketId}/${channelId}/${Date.now()}-${hash}${ext}`;
+
+        const publicUrl = await uploadBufferToR2(key, buf, contentType);
+        map.set(originalUrl, { publicUrl, contentType, name: fileName });
+      } catch (e) {
+        console.error("[R2] upload failed:", e);
+        // w razie błędu zachowaj przynajmniej oryginalny Discord URL (może chwilę pożyje)
+        // ale NIE dodajemy do mapy, żeby renderer użył oryginalnego URL
+      }
+    }
+  }
+
+  return map;
+}
+
 /* -------------------------- core close flow -------------------------- */
 
 async function doCloseFlow(args: {
@@ -502,9 +622,18 @@ async function doCloseFlow(args: {
     channelId
   ) as TextChannel;
 
-  // 1) zbierz wiadomości i wyrenderuj HTML
+  // 1) zbierz wiadomości
   const messages = await fetchAllMessages(channel, 1000);
-  const html = renderTranscriptHtml(messages);
+
+  // 1a) zarchiwizuj załączniki do R2 (i zbuduj mapę URL-i)
+  const uploadedMap = await archiveAllAttachmentsToR2(
+    messages,
+    ticketId,
+    channelId
+  );
+
+  // 1b) wyrenderuj HTML (z zamianą linków na R2 oraz inline <img>)
+  const html = renderTranscriptHtml(messages, uploadedMap);
 
   // ⇩ nazwa zamykającego
   const closerMember = await interaction
@@ -529,7 +658,7 @@ async function doCloseFlow(args: {
         status: "CLOSED",
         closedAt: new Date(),
         closedById: closerId,
-        closedByName, // << zapisz
+        closedByName,
         closeReason: reason,
       },
     }),
@@ -593,34 +722,43 @@ async function fetchAllMessages(channel: TextChannel, max: number) {
   return all.slice(0, max);
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (m) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
-        m
-      ]!)
-  );
-}
-
-// Tailwindowy renderer wiadomości: polskie daty, brak ID, bez <pre> (zawijanie)
-function renderTranscriptHtml(messages: any[]): string {
+// Renderer: polskie daty, brak ID, bez <pre>, zawijanie, linki/obrazki z R2
+function renderTranscriptHtml(messages: any[], uploadedMap: Map<string, UploadedInfo>): string {
   return messages
     .map((m) => {
       const time = fmtPL(m.createdTimestamp);
       const who = escapeHtml(displayNameOf(m));
       const content = m.content ? escapeHtml(m.content) : "";
       const attachments = Array.from(m.attachments?.values?.() || []);
-      const attachmentsHtml = attachments.length
-        ? `<div class="mt-2 text-sm text-gray-800">Załączniki: ${attachments
-            .map(
-              (a: any) =>
-                `<a class="underline hover:text-flame" href="${escapeHtml(
-                  a.url
-                )}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a>`
-            )
-            .join(", ")}</div>`
-        : "";
+
+      let attachmentsHtml = "";
+      if (attachments.length) {
+        const parts: string[] = [];
+
+        for (const a of attachments) {
+          const replacement = uploadedMap.get(a.url);
+          const finalUrl = replacement?.publicUrl || a.url;
+          const name = escapeHtml(replacement?.name || a.name || "plik");
+          const ct = replacement?.contentType || a.contentType || guessContentType(a.name || "plik");
+
+          if (isImageContentType(ct)) {
+            parts.push(
+              `<div class="mt-2">
+                <a href="${escapeHtml(finalUrl)}" target="_blank" rel="noopener" class="underline hover:text-flame">${name}</a>
+                <div class="mt-1"><img src="${escapeHtml(finalUrl)}" alt="${name}" style="max-width:100%;height:auto;border-radius:12px;border:1px solid #fde68a;" /></div>
+              </div>`
+            );
+          } else {
+            parts.push(
+              `<div class="mt-2">
+                Załącznik: <a href="${escapeHtml(finalUrl)}" target="_blank" rel="noopener" class="underline hover:text-flame">${name}</a>
+              </div>`
+            );
+          }
+        }
+
+        attachmentsHtml = `<div class="text-sm text-gray-800">${parts.join("")}</div>`;
+      }
 
       return `
 <div class="px-6 py-4">
@@ -632,9 +770,7 @@ function renderTranscriptHtml(messages: any[]): string {
       </div>
       <div class="message-bubble mt-1 rounded-xl border border-orange-100 bg-orange-50/40 p-3 shadow-sm">
         <div class="message-content" style="white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;">
-          ${
-            content || '<span class="text-gray-500 italic">(brak treści)</span>'
-          }
+          ${content || '<span class="text-gray-500 italic">(brak treści)</span>'}
         </div>
         ${attachmentsHtml}
       </div>
