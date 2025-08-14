@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Transkrypcja ticket #<%= ticket.number %></title>
+  <style>
+    :root{color-scheme: light dark}
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; line-height: 1.5; }
+    header { margin-bottom: 16px; }
+    .meta { color:#666; font-size: 14px; }
+    .reason { background: rgba(0,0,0,.04); padding: 8px 12px; border-radius: 8px; }
+    .msg { padding: 10px 12px; border-bottom: 1px solid #e9e9e9; }
+    .msg .who { font-weight: 600; }
+    .msg .time { color:#777; font-size: 12px; margin-left: 8px; }
+    .content pre { white-space: pre-wrap; word-break: break-word; margin:6px 0 0 0; }
+    a { color: inherit }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Transkrypcja ticketu #<%= ticket.number %></h1>
+    <p class="meta">
+      Status: <b><%= ticket.status %></b>
+      <% if (ticket.closedAt) { %> (zamknięty <%= new Date(ticket.closedAt).toLocaleString() %>) <% } %><br/>
+      Autor: <code><%= ticket.openerId %></code>
+      <% if (ticket.closedById) { %> • Zamknięty przez: <code><%= ticket.closedById %></code><% } %>
+    </p>
+    <% if (ticket.closeReason) { %>
+      <p class="reason"><b>Powód zamknięcia:</b> <%= ticket.closeReason %></p>
+    <% } %>
+  </header>
+
+  <!-- wstrzykujemy zrenderowane wcześniej HTML (escape off) -->
+  <%- transcriptHtml %>
+</body>
+</html>

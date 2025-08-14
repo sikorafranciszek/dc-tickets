@@ -1,20 +1,38 @@
-import { Router } from 'express';
-import { CFG } from './config';
-import { prisma } from './prisma';
+import { Router } from "express";
+import { prisma } from "./prisma";
+import { CFG } from "./config.js";
 
-export const router = Router()
+// PUBLICZNE ROUTES (bez API key)
+export const publicRouter = Router();
+
+publicRouter.get("/ticket/:id", async (req, res) => {
+  const id = req.params.id;
+  const ticket = await prisma.ticket.findUnique({
+    where: { id },
+    include: { transcript: true }
+  });
+
+  if (!ticket || !ticket.transcript) {
+    return res.status(404).send("Transkrypcja nie znaleziona.");
+  }
+
+  return res.render("ticket", {
+    ticket,
+    transcriptHtml: ticket.transcript.html,
+    baseUrl: CFG.http.baseUrl
+  });
+});
+
+// API (z x-api-key)
+export const router = Router();
 
 router.use((req, res, next) => {
-    const key = req.headers['x-api-key'];
-    if (key !== CFG.http.apiKey) {
-        return res.status(403).json({ error: 'unauthorized' });
-    }
-    next();
-})
+  const key = req.header("x-api-key");
+  if (key !== CFG.http.apiKey) return res.status(401).json({ error: "unauthorized" });
+  next();
+});
 
-router.get('/health', (_req, res) => {
-    res.json({ ok: true });
-})
+router.get("/health", (_req, res) => res.json({ ok: true }));
 
 router.get("/tickets", async (req, res) => {
   const { status, guildId } = req.query as { status?: "OPEN" | "CLOSED"; guildId?: string };

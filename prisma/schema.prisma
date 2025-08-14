@@ -1,36 +1,46 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
 generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-    provider = "mysql"
-    url      = env("DATABASE_URL")
+model Ticket {
+  id          String        @id @default(cuid())
+  number      Int           @default(0)
+  guildId     String
+  channelId   String        @unique
+  openerId    String
+  status      TicketStatus  @default(OPEN)
+  createdAt   DateTime      @default(now())
+  closedAt    DateTime?
+  // NOWE:
+  closedById  String?
+  closeReason String?
+  transcript  TicketTranscript?
+
+  @@index([guildId, status])
 }
 
-model Ticket {
-    id String @id @default(cuid())
-    number Int @default(0)
-    guildId String
-    channelId String @unique
-    openerId String
-    status TicketStatus @default(OPEN)
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    closedAt DateTime?
-
-    @@index([guildId, status])
+model TicketTranscript {
+  id        String   @id @default(cuid())
+  ticketId  String   @unique
+  html      String   @db.LongText
+  createdAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 }
 
 enum TicketStatus {
-    OPEN
-    CLOSED
+  OPEN
+  CLOSED
 }
 
 model GuildConfig {
-    guildId String @id
-    managerRoleIds String @default("")
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  guildId        String   @id
+  // u Ciebie to String (JSON w stringu)
+  managerRoleIds String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

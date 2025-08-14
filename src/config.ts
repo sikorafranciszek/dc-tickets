@@ -14,7 +14,8 @@ export const CFG = {
   },
   http: {
     port: Number(process.env.PORT || 3000),
-    apiKey: process.env.API_KEY || "changeme"
+    apiKey: process.env.API_KEY || "changeme",
+    baseUrl: process.env.BASE_URL || "http://localhost:3000",
   }
 };
 
