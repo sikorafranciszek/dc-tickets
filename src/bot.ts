@@ -25,6 +25,10 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import path from "path";
 
+/* =========================
+   Konfiguracja & stałe
+   ========================= */
+
 const BUTTON_OPEN_ID = "ticket_open_btn";
 const BUTTON_CLOSE_NOP_ID = "ticket_close_nop";
 const BUTTON_CLOSE_WITH_ID = "ticket_close_with";
@@ -50,7 +54,9 @@ if (!R2_BUCKET || !R2_PUBLIC_BASE_URL || !process.env.R2_ENDPOINT) {
   );
 }
 
-/* -------------------------- helpers -------------------------- */
+/* =========================
+   Helpers
+   ========================= */
 
 function parseRoleIds(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw as string[];
@@ -128,7 +134,11 @@ function isImageContentType(ct: string) {
   return ct?.startsWith("image/");
 }
 
-/* -------------------------- UI builders -------------------------- */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/* =========================
+   UI builders
+   ========================= */
 
 export function buildOpenPanel() {
   const btn = new ButtonBuilder()
@@ -169,7 +179,9 @@ function buildCloseReasonModal() {
   );
 }
 
-/* -------------------------- client -------------------------- */
+/* =========================
+   Client
+   ========================= */
 
 export function createClient() {
   const client = new Client({
@@ -216,7 +228,7 @@ export function createClient() {
         await interaction
           .reply({
             content: "Wystąpił błąd podczas przetwarzania interakcji.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           })
           .catch(() => {});
       }
@@ -226,11 +238,13 @@ export function createClient() {
   return client;
 }
 
-/* -------------------------- commands -------------------------- */
+/* =========================
+   Commands
+   ========================= */
 
 async function handleSetupTickets(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId || !interaction.guild) {
-    return interaction.reply({ content: "Użyj na serwerze.", ephemeral: true });
+    return interaction.reply({ content: "Użyj na serwerze.", flags: MessageFlags.Ephemeral });
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -342,13 +356,15 @@ async function handleRemoveRole(interaction: ChatInputCommandInteraction) {
   return interaction.editReply(`✅ Usunięto rolę ${role} z listy managerów.`);
 }
 
-/* -------------------------- tworzenie ticketu -------------------------- */
+/* =========================
+   Tworzenie ticketu
+   ========================= */
 
 const ticketRateLimit = new Map<string, number>(); // userId -> timestamp
 
 async function handleOpenTicket(interaction: ButtonInteraction) {
   if (!interaction.guildId || !interaction.guild) {
-    return interaction.reply({ content: "Użyj na serwerze.", ephemeral: true });
+    return interaction.reply({ content: "Użyj na serwerze.", flags: MessageFlags.Ephemeral });
   }
 
   const now = Date.now();
@@ -357,7 +373,7 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
     const wait = Math.ceil((60_000 - (now - lastTicketTs)) / 1000);
     return interaction.reply({
       content: `⏳ Możesz utworzyć nowy ticket za ${wait}s.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
   ticketRateLimit.set(interaction.user.id, now);
@@ -455,7 +471,9 @@ async function handleOpenTicket(interaction: ButtonInteraction) {
   await interaction.editReply(`✅ Ticket utworzony: <#${channel.id}>`);
 }
 
-/* -------------------------- zamykanie -------------------------- */
+/* =========================
+   Zamykanie ticketu
+   ========================= */
 
 async function handleOpenCloseReasonModal(interaction: ButtonInteraction) {
   if (!interaction.guildId) return;
@@ -463,11 +481,32 @@ async function handleOpenCloseReasonModal(interaction: ButtonInteraction) {
   if (!(await isManagerMember(member))) {
     return interaction.reply({
       content: "Nie masz uprawnień do zamknięcia ticketu.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
   await interaction.showModal(buildCloseReasonModal());
 }
+
+async function safeFinishInteraction(
+  interaction: ButtonInteraction | ModalSubmitInteraction,
+  content: string
+) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(content);
+    } else {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    }
+  } catch {
+    // Jeśli edycja poległa (np. @original nie istnieje), spróbuj followUp
+    try {
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+    } catch {}
+  }
+}
+
+// Blokada (mutex) na kanał — nie dopuści do równoległego zamknięcia
+const closingLocks = new Set<string>();
 
 async function handleCloseTicket(
   interaction: ButtonInteraction,
@@ -478,30 +517,37 @@ async function handleCloseTicket(
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const channelId = interaction.channelId;
-  const ticket = await prisma.ticket.findFirst({ where: { channelId } });
-  if (!ticket || ticket.status === "CLOSED") {
-    return interaction.editReply(
-      "Ten ticket jest już zamknięty lub nie istnieje w DB."
-    );
-  }
 
-  // tylko whitelist – autor NIE może zamykać
-  const member = await interaction.guild!.members.fetch(interaction.user.id);
-  if (!(await isManagerMember(member))) {
-    return interaction.editReply(
-      "Nie masz uprawnień do zamknięcia tego ticketu."
-    );
+  if (closingLocks.has(channelId)) {
+    return safeFinishInteraction(interaction, "To zgłoszenie jest już zamykane…");
   }
+  closingLocks.add(channelId);
 
-  const reason = opts.withReason ? "(brak powodu)" : undefined;
-  await doCloseFlow({
-    interaction,
-    ticketId: ticket.id,
-    channelId,
-    closerId: interaction.user.id,
-    reason,
-  });
-  await interaction.editReply("✅ Zamknięto ticket.");
+  try {
+    const ticket = await prisma.ticket.findFirst({ where: { channelId } });
+    if (!ticket || ticket.status === "CLOSED") {
+      return safeFinishInteraction(interaction, "Ten ticket jest już zamknięty lub nie istnieje w DB.");
+    }
+
+    // tylko whitelist – autor NIE może zamykać
+    const member = await interaction.guild!.members.fetch(interaction.user.id);
+    if (!(await isManagerMember(member))) {
+      return safeFinishInteraction(interaction, "Nie masz uprawnień do zamknięcia tego ticketu.");
+    }
+
+    const reason = opts.withReason ? "(brak powodu)" : undefined;
+    await doCloseFlow({
+      interaction,
+      ticketId: ticket.id,
+      channelId,
+      closerId: interaction.user.id,
+      reason,
+    });
+
+    await safeFinishInteraction(interaction, "✅ Zamknięto ticket.");
+  } finally {
+    closingLocks.delete(channelId);
+  }
 }
 
 async function handleCloseTicketWithReason(
@@ -512,33 +558,43 @@ async function handleCloseTicketWithReason(
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const channelId = interaction.channelId;
-  const ticket = await prisma.ticket.findFirst({ where: { channelId } });
-  if (!ticket || ticket.status === "CLOSED") {
-    return interaction.editReply(
-      "Ten ticket jest już zamknięty lub nie istnieje w DB."
-    );
-  }
 
-  const member = await interaction.guild!.members.fetch(interaction.user.id);
-  if (!(await isManagerMember(member))) {
-    return interaction.editReply(
-      "Nie masz uprawnień do zamknięcia tego ticketu."
-    );
+  if (closingLocks.has(channelId)) {
+    return safeFinishInteraction(interaction, "To zgłoszenie jest już zamykane…");
   }
+  closingLocks.add(channelId);
 
-  const reason =
-    interaction.fields.getTextInputValue("reason")?.trim() || "(brak powodu)";
-  await doCloseFlow({
-    interaction,
-    ticketId: ticket.id,
-    channelId,
-    closerId: interaction.user.id,
-    reason,
-  });
-  await interaction.editReply("✅ Zamknięto ticket (z powodem).");
+  try {
+    const ticket = await prisma.ticket.findFirst({ where: { channelId } });
+    if (!ticket || ticket.status === "CLOSED") {
+      return safeFinishInteraction(interaction, "Ten ticket jest już zamknięty lub nie istnieje w DB.");
+    }
+
+    const member = await interaction.guild!.members.fetch(interaction.user.id);
+    if (!(await isManagerMember(member))) {
+      return safeFinishInteraction(interaction, "Nie masz uprawnień do zamknięcia tego ticketu.");
+    }
+
+    const reason =
+      interaction.fields.getTextInputValue("reason")?.trim() || "(brak powodu)";
+
+    await doCloseFlow({
+      interaction,
+      ticketId: ticket.id,
+      channelId,
+      closerId: interaction.user.id,
+      reason,
+    });
+
+    await safeFinishInteraction(interaction, "✅ Zamknięto ticket (z powodem).");
+  } finally {
+    closingLocks.delete(channelId);
+  }
 }
 
-/* -------------------------- R2: upload załączników -------------------------- */
+/* =========================
+   R2: upload załączników
+   ========================= */
 
 type UploadedInfo = {
   publicUrl: string;
@@ -546,7 +602,11 @@ type UploadedInfo = {
   name: string;
 };
 
-async function uploadBufferToR2(key: string, buffer: Buffer, contentType: string) {
+async function uploadBufferToR2(
+  key: string,
+  buffer: Buffer,
+  contentType: string
+) {
   if (!R2_BUCKET) throw new Error("R2 not configured");
   await R2.send(
     new PutObjectCommand({
@@ -554,7 +614,6 @@ async function uploadBufferToR2(key: string, buffer: Buffer, contentType: string
       Key: key,
       Body: buffer,
       ContentType: contentType || "application/octet-stream",
-      // Uwaga: R2 nie wspiera ACL "public-read"; dostęp publiczny konfiguruj na buckecie/CDN.
     })
   );
   if (!R2_PUBLIC_BASE_URL) throw new Error("R2_PUBLIC_BASE_URL not set");
@@ -570,24 +629,32 @@ async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
 /**
  * Przechodzi po wszystkich wiadomościach i wysyła każdy attachment do R2.
  * Zwraca mapę: oryginalnyURL -> { publicUrl, contentType, name }
+ * Z fallbackiem na oryginalny Discord URL, gdy upload się nie powiedzie.
  */
-async function archiveAllAttachmentsToR2(messages: any[], ticketId: string, channelId: string) {
+async function archiveAllAttachmentsToR2(
+  messages: any[],
+  ticketId: string,
+  channelId: string
+) {
   const map = new Map<string, UploadedInfo>();
 
-  // Jeśli R2 nie jest skonfigurowane – zwróć pustą mapę (zachowamy linki Discorda)
-  if (!R2_BUCKET || !process.env.R2_ENDPOINT || !R2_PUBLIC_BASE_URL) {
-    return map;
-  }
+  // R2 off — będziemy używać oryginalnych URLi
+  const r2Enabled = !!(R2_BUCKET && process.env.R2_ENDPOINT && R2_PUBLIC_BASE_URL);
 
   for (const m of messages) {
     const attachments = Array.from(m.attachments?.values?.() || []);
     for (const att of attachments) {
       const originalUrl: string = att.url;
       const fileName: string = att.name || "file";
-      const contentType: string = att.contentType || guessContentType(fileName);
+      const contentType: string =
+        att.contentType || guessContentType(fileName);
 
-      // unikaj duplikatów
       if (map.has(originalUrl)) continue;
+
+      if (!r2Enabled) {
+        map.set(originalUrl, { publicUrl: originalUrl, contentType, name: fileName });
+        continue;
+      }
 
       try {
         const buf = Buffer.from(await fetchArrayBuffer(originalUrl));
@@ -599,8 +666,8 @@ async function archiveAllAttachmentsToR2(messages: any[], ticketId: string, chan
         map.set(originalUrl, { publicUrl, contentType, name: fileName });
       } catch (e) {
         console.error("[R2] upload failed:", e);
-        // w razie błędu zachowaj przynajmniej oryginalny Discord URL (może chwilę pożyje)
-        // ale NIE dodajemy do mapy, żeby renderer użył oryginalnego URL
+        // fallback do oryginalnego linka z Discorda (jeśli jeszcze żyje)
+        map.set(originalUrl, { publicUrl: originalUrl, contentType, name: fileName });
       }
     }
   }
@@ -608,7 +675,9 @@ async function archiveAllAttachmentsToR2(messages: any[], ticketId: string, chan
   return map;
 }
 
-/* -------------------------- core close flow -------------------------- */
+/* =========================
+   Core close flow
+   ========================= */
 
 async function doCloseFlow(args: {
   interaction: ButtonInteraction | ModalSubmitInteraction;
@@ -625,6 +694,8 @@ async function doCloseFlow(args: {
 
   // 1) zbierz wiadomości
   const messages = await fetchAllMessages(channel, 1000);
+  // mały oddech, żeby CDN Discorda stabilnie oddał assety
+  await sleep(300);
 
   // 1a) zarchiwizuj załączniki do R2 (i zbuduj mapę URL-i)
   const uploadedMap = await archiveAllAttachmentsToR2(
@@ -674,7 +745,7 @@ async function doCloseFlow(args: {
   await channel
     .setName(`closed-${(t.number ?? 0).toString().padStart(4, "0")}`)
     .catch(() => {});
-  await channel.send("🔒 Ticket zamknięty. Transkrypcja zapisana.");
+  await channel.send("🔒 Ticket zamknięty. Transkrypcja zapisana.").catch(() => {});
 
   // 4) DM do autora i zamykającego
   const url = `${CFG.http.baseUrl}/ticket/${t.id}`;
@@ -686,7 +757,6 @@ async function doCloseFlow(args: {
     .fetch(closerId)
     .catch(() => null);
 
-  // Przygotuj embed dla autora
   const authorEmbed = new EmbedBuilder()
     .setTitle(`Twój ticket #${t.number} został zamknięty`)
     .setColor(0xf59e42)
@@ -695,24 +765,26 @@ async function doCloseFlow(args: {
         ? `**Powód zamknięcia:**\n${reason}`
         : "Ticket został zamknięty przez administratora."
     )
-    .addFields({ name: "Historia zgłoszenia", value: `[Kliknij tutaj, aby zobaczyć](${url})` })
+    .addFields({
+      name: "Historia zgłoszenia",
+      value: `[Kliknij tutaj, aby zobaczyć](${url})`,
+    })
     .setTimestamp(new Date())
     .setFooter({ text: "System ticketów" });
 
-  // Przygotuj embed dla zamykającego
   const closerEmbed = new EmbedBuilder()
     .setTitle(`Zamknąłeś ticket #${t.number}`)
     .setColor(0xf59e42)
     .setDescription(
-      reason
-        ? `**Powód zamknięcia:**\n${reason}`
-        : "Ticket został zamknięty."
+      reason ? `**Powód zamknięcia:**\n${reason}` : "Ticket został zamknięty."
     )
-    .addFields({ name: "Historia zgłoszenia", value: `[Kliknij tutaj, aby zobaczyć](${url})` })
+    .addFields({
+      name: "Historia zgłoszenia",
+      value: `[Kliknij tutaj, aby zobaczyć](${url})`,
+    })
     .setTimestamp(new Date())
     .setFooter({ text: "System ticketów" });
 
-  // Przyciski z odnośnikami
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setLabel("Zobacz historię zgłoszenia")
@@ -721,9 +793,13 @@ async function doCloseFlow(args: {
   );
 
   if (openerUser)
-    await openerUser.send({ embeds: [authorEmbed], components: [row] }).catch(() => {});
+    await openerUser
+      .send({ embeds: [authorEmbed], components: [row] })
+      .catch(() => {});
   if (closerUser)
-    await closerUser.send({ embeds: [closerEmbed], components: [row] }).catch(() => {});
+    await closerUser
+      .send({ embeds: [closerEmbed], components: [row] })
+      .catch(() => {});
 
   // 5) usuń kanał
   await channel
@@ -731,7 +807,9 @@ async function doCloseFlow(args: {
     .catch(() => {});
 }
 
-/* -------------------------- transcript utils -------------------------- */
+/* =========================
+   Transcript utils
+   ========================= */
 
 async function fetchAllMessages(channel: TextChannel, max: number) {
   const all: any[] = [];
@@ -753,7 +831,10 @@ async function fetchAllMessages(channel: TextChannel, max: number) {
 }
 
 // Renderer: polskie daty, brak ID, bez <pre>, zawijanie, linki/obrazki z R2
-function renderTranscriptHtml(messages: any[], uploadedMap: Map<string, UploadedInfo>): string {
+function renderTranscriptHtml(
+  messages: any[],
+  uploadedMap: Map<string, UploadedInfo>
+): string {
   return messages
     .map((m) => {
       const time = fmtPL(m.createdTimestamp);
@@ -769,25 +850,36 @@ function renderTranscriptHtml(messages: any[], uploadedMap: Map<string, Uploaded
           const replacement = uploadedMap.get(a.url);
           const finalUrl = replacement?.publicUrl || a.url;
           const name = escapeHtml(replacement?.name || a.name || "plik");
-          const ct = replacement?.contentType || a.contentType || guessContentType(a.name || "plik");
+          const ct =
+            replacement?.contentType ||
+            a.contentType ||
+            guessContentType(a.name || "plik");
 
           if (isImageContentType(ct)) {
             parts.push(
               `<div class="mt-2">
-                <a href="${escapeHtml(finalUrl)}" target="_blank" rel="noopener" class="underline hover:text-flame">${name}</a>
-                <div class="mt-1"><img src="${escapeHtml(finalUrl)}" alt="${name}" style="max-width:100%;height:auto;border-radius:12px;border:1px solid #fde68a;" /></div>
+                <a href="${escapeHtml(
+                  finalUrl
+                )}" target="_blank" rel="noopener" class="underline hover:text-flame">${name}</a>
+                <div class="mt-1"><img src="${escapeHtml(
+                  finalUrl
+                )}" alt="${name}" style="max-width:100%;height:auto;border-radius:12px;border:1px solid #fde68a;" /></div>
               </div>`
             );
           } else {
             parts.push(
               `<div class="mt-2">
-                Załącznik: <a href="${escapeHtml(finalUrl)}" target="_blank" rel="noopener" class="underline hover:text-flame">${name}</a>
+                Załącznik: <a href="${escapeHtml(
+                  finalUrl
+                )}" target="_blank" rel="noopener" class="underline hover:text-flame">${name}</a>
               </div>`
             );
           }
         }
 
-        attachmentsHtml = `<div class="text-sm text-gray-800">${parts.join("")}</div>`;
+        attachmentsHtml = `<div class="text-sm text-gray-800">${parts.join(
+          ""
+        )}</div>`;
       }
 
       return `
