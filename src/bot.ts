@@ -16,6 +16,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ModalSubmitInteraction,
+  EmbedBuilder,
   type OverwriteResolvable,
 } from "discord.js";
 import { prisma } from "./prisma";
@@ -677,6 +678,7 @@ async function doCloseFlow(args: {
 
   // 4) DM do autora i zamykającego
   const url = `${CFG.http.baseUrl}/ticket/${t.id}`;
+
   const openerUser = await interaction.client.users
     .fetch(t.openerId)
     .catch(() => null);
@@ -684,16 +686,44 @@ async function doCloseFlow(args: {
     .fetch(closerId)
     .catch(() => null);
 
-  const authorMsg = reason
-    ? `Twój ticket #${t.number} został zamknięty.\nPowód: ${reason}\nHistoria: ${url}`
-    : `Twój ticket #${t.number} został zamknięty.\nHistoria: ${url}`;
+  // Przygotuj embed dla autora
+  const authorEmbed = new EmbedBuilder()
+    .setTitle(`Twój ticket #${t.number} został zamknięty`)
+    .setColor(0xf59e42)
+    .setDescription(
+      reason
+        ? `**Powód zamknięcia:**\n${reason}`
+        : "Ticket został zamknięty przez administratora."
+    )
+    .addFields({ name: "Historia zgłoszenia", value: `[Kliknij tutaj, aby zobaczyć](${url})` })
+    .setTimestamp(new Date())
+    .setFooter({ text: "System ticketów" });
 
-  const closerMsg = reason
-    ? `Zamknąłeś ticket #${t.number}.\nPowód: ${reason}\nHistoria: ${url}`
-    : `Zamknąłeś ticket #${t.number}.\nHistoria: ${url}`;
+  // Przygotuj embed dla zamykającego
+  const closerEmbed = new EmbedBuilder()
+    .setTitle(`Zamknąłeś ticket #${t.number}`)
+    .setColor(0xf59e42)
+    .setDescription(
+      reason
+        ? `**Powód zamknięcia:**\n${reason}`
+        : "Ticket został zamknięty."
+    )
+    .addFields({ name: "Historia zgłoszenia", value: `[Kliknij tutaj, aby zobaczyć](${url})` })
+    .setTimestamp(new Date())
+    .setFooter({ text: "System ticketów" });
 
-  if (openerUser) await openerUser.send(authorMsg).catch(() => {});
-  if (closerUser) await closerUser.send(closerMsg).catch(() => {});
+  // Przyciski z odnośnikami
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel("Zobacz historię zgłoszenia")
+      .setStyle(ButtonStyle.Link)
+      .setURL(url)
+  );
+
+  if (openerUser)
+    await openerUser.send({ embeds: [authorEmbed], components: [row] }).catch(() => {});
+  if (closerUser)
+    await closerUser.send({ embeds: [closerEmbed], components: [row] }).catch(() => {});
 
   // 5) usuń kanał
   await channel
