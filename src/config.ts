@@ -16,6 +16,9 @@ export const CFG = {
     port: Number(process.env.PORT || 3000),
     apiKey: process.env.API_KEY || "changeme",
     baseUrl: process.env.BASE_URL || "http://localhost:3000",
+  },
+  minecraft: {
+    ip: process.env.IP_MC_STATUS!,
   }
 };
 
