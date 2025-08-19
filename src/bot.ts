@@ -18,6 +18,7 @@ import {
   ModalSubmitInteraction,
   EmbedBuilder,
   type OverwriteResolvable,
+  ActivityType,
 } from "discord.js";
 import { prisma } from "./prisma";
 import { CFG } from "./config";
@@ -113,8 +114,8 @@ function escapeHtml(s: string): string {
     (m) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
         m
-      ]!
-  ));
+      ]!)
+  );
 }
 
 function guessContentType(filename: string): string {
@@ -196,6 +197,37 @@ export function createClient() {
 
   client.once("ready", () => {
     console.log(`Zalogowano jako ${client.user?.tag}`);
+
+    setInterval(() => {
+      let onlineUsers: number;
+
+    fetch(`https://mcstatus.pl/api/status?host=${CFG.minecraft.ip}`)
+      .then(
+        (res) =>
+          res.json() as Promise<{ players_online: number; online: boolean }>
+      )
+      .then((data) => {
+        if (data.online) {
+          if (data?.players_online) {
+            onlineUsers = data.players_online;
+            client.user?.setPresence({
+              activities: [
+                {
+                  name: `${CFG.minecraft.ip.toUpperCase()} | Online: ${onlineUsers}`,
+                  type: ActivityType.Custom,
+                },
+              ],
+            });
+          } else {
+            client.user?.setPresence({
+              activities: [
+                { name: `${CFG.minecraft.ip.toUpperCase()} | Offline`, type: ActivityType.Custom },
+              ],
+            });
+          }
+        }
+      });
+    }, 10 * 1000)
   });
 
   client.on("interactionCreate", async (interaction) => {
@@ -244,7 +276,10 @@ export function createClient() {
 
 async function handleSetupTickets(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId || !interaction.guild) {
-    return interaction.reply({ content: "Użyj na serwerze.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Użyj na serwerze.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -364,7 +399,10 @@ const ticketRateLimit = new Map<string, number>(); // userId -> timestamp
 
 async function handleOpenTicket(interaction: ButtonInteraction) {
   if (!interaction.guildId || !interaction.guild) {
-    return interaction.reply({ content: "Użyj na serwerze.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Użyj na serwerze.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const now = Date.now();
@@ -519,20 +557,29 @@ async function handleCloseTicket(
   const channelId = interaction.channelId;
 
   if (closingLocks.has(channelId)) {
-    return safeFinishInteraction(interaction, "To zgłoszenie jest już zamykane…");
+    return safeFinishInteraction(
+      interaction,
+      "To zgłoszenie jest już zamykane…"
+    );
   }
   closingLocks.add(channelId);
 
   try {
     const ticket = await prisma.ticket.findFirst({ where: { channelId } });
     if (!ticket || ticket.status === "CLOSED") {
-      return safeFinishInteraction(interaction, "Ten ticket jest już zamknięty lub nie istnieje w DB.");
+      return safeFinishInteraction(
+        interaction,
+        "Ten ticket jest już zamknięty lub nie istnieje w DB."
+      );
     }
 
     // tylko whitelist – autor NIE może zamykać
     const member = await interaction.guild!.members.fetch(interaction.user.id);
     if (!(await isManagerMember(member))) {
-      return safeFinishInteraction(interaction, "Nie masz uprawnień do zamknięcia tego ticketu.");
+      return safeFinishInteraction(
+        interaction,
+        "Nie masz uprawnień do zamknięcia tego ticketu."
+      );
     }
 
     const reason = opts.withReason ? "(brak powodu)" : undefined;
@@ -560,19 +607,28 @@ async function handleCloseTicketWithReason(
   const channelId = interaction.channelId;
 
   if (closingLocks.has(channelId)) {
-    return safeFinishInteraction(interaction, "To zgłoszenie jest już zamykane…");
+    return safeFinishInteraction(
+      interaction,
+      "To zgłoszenie jest już zamykane…"
+    );
   }
   closingLocks.add(channelId);
 
   try {
     const ticket = await prisma.ticket.findFirst({ where: { channelId } });
     if (!ticket || ticket.status === "CLOSED") {
-      return safeFinishInteraction(interaction, "Ten ticket jest już zamknięty lub nie istnieje w DB.");
+      return safeFinishInteraction(
+        interaction,
+        "Ten ticket jest już zamknięty lub nie istnieje w DB."
+      );
     }
 
     const member = await interaction.guild!.members.fetch(interaction.user.id);
     if (!(await isManagerMember(member))) {
-      return safeFinishInteraction(interaction, "Nie masz uprawnień do zamknięcia tego ticketu.");
+      return safeFinishInteraction(
+        interaction,
+        "Nie masz uprawnień do zamknięcia tego ticketu."
+      );
     }
 
     const reason =
@@ -586,7 +642,10 @@ async function handleCloseTicketWithReason(
       reason,
     });
 
-    await safeFinishInteraction(interaction, "✅ Zamknięto ticket (z powodem).");
+    await safeFinishInteraction(
+      interaction,
+      "✅ Zamknięto ticket (z powodem)."
+    );
   } finally {
     closingLocks.delete(channelId);
   }
@@ -639,20 +698,27 @@ async function archiveAllAttachmentsToR2(
   const map = new Map<string, UploadedInfo>();
 
   // R2 off — będziemy używać oryginalnych URLi
-  const r2Enabled = !!(R2_BUCKET && process.env.R2_ENDPOINT && R2_PUBLIC_BASE_URL);
+  const r2Enabled = !!(
+    R2_BUCKET &&
+    process.env.R2_ENDPOINT &&
+    R2_PUBLIC_BASE_URL
+  );
 
   for (const m of messages) {
     const attachments = Array.from(m.attachments?.values?.() || []);
     for (const att of attachments) {
       const originalUrl: string = att.url;
       const fileName: string = att.name || "file";
-      const contentType: string =
-        att.contentType || guessContentType(fileName);
+      const contentType: string = att.contentType || guessContentType(fileName);
 
       if (map.has(originalUrl)) continue;
 
       if (!r2Enabled) {
-        map.set(originalUrl, { publicUrl: originalUrl, contentType, name: fileName });
+        map.set(originalUrl, {
+          publicUrl: originalUrl,
+          contentType,
+          name: fileName,
+        });
         continue;
       }
 
@@ -667,7 +733,11 @@ async function archiveAllAttachmentsToR2(
       } catch (e) {
         console.error("[R2] upload failed:", e);
         // fallback do oryginalnego linka z Discorda (jeśli jeszcze żyje)
-        map.set(originalUrl, { publicUrl: originalUrl, contentType, name: fileName });
+        map.set(originalUrl, {
+          publicUrl: originalUrl,
+          contentType,
+          name: fileName,
+        });
       }
     }
   }
@@ -745,7 +815,9 @@ async function doCloseFlow(args: {
   await channel
     .setName(`closed-${(t.number ?? 0).toString().padStart(4, "0")}`)
     .catch(() => {});
-  await channel.send("🔒 Ticket zamknięty. Transkrypcja zapisana.").catch(() => {});
+  await channel
+    .send("🔒 Ticket zamknięty. Transkrypcja zapisana.")
+    .catch(() => {});
 
   // 4) DM do autora i zamykającego
   const url = `${CFG.http.baseUrl}/ticket/${t.id}`;
@@ -892,7 +964,9 @@ function renderTranscriptHtml(
       </div>
       <div class="message-bubble mt-1 rounded-xl border border-orange-100 bg-orange-50/40 p-3 shadow-sm">
         <div class="message-content" style="white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;">
-          ${content || '<span class="text-gray-500 italic">(brak treści)</span>'}
+          ${
+            content || '<span class="text-gray-500 italic">(brak treści)</span>'
+          }
         </div>
         ${attachmentsHtml}
       </div>
