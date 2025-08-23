@@ -208,7 +208,7 @@ export function createClient() {
       )
       .then((data) => {
         if (data.online) {
-          if (data?.players_online) {
+          if (data?.players_online <= 0) {
             onlineUsers = data.players_online;
             client.user?.setPresence({
               activities: [
